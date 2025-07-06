@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "yu-image-search-mcp-server": {
+      "url": "http://localhost:8128/sse"
+    }
+  }
+} 
