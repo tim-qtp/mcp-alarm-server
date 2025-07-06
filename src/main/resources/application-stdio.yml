@@ -2,7 +2,7 @@ spring:
   ai:
     mcp:
       server:
-        name: yu-image-search-mcp-server
+        name: alarm-mcp-server
         version: 0.0.1
         type: ASYNC
         # stdio

@@ -1,4 +1,4 @@
-package com.yupi.yuimagesearchmcpserver.tools;
+package com.qtp.mcpserver.tools;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;

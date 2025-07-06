@@ -1,6 +1,6 @@
-package com.yupi.yuimagesearchmcpserver.tools;
+package com.qtp.mcpserver.tools;
 
-import com.yupi.yuimagesearchmcpserver.storage.AlertStorage;
+import com.qtp.mcpserver.storage.AlertStorage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 

@@ -1,4 +1,4 @@
-package com.yupi.yuimagesearchmcpserver.tools;
+package com.qtp.mcpserver.tools;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.http.HttpUtil;

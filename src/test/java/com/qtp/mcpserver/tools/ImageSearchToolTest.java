@@ -1,4 +1,4 @@
-package com.yupi.yuimagesearchmcpserver.tools;
+package com.qtp.mcpserver.tools;
 
 import jakarta.annotation.Resource;
 import org.junit.jupiter.api.Assertions;

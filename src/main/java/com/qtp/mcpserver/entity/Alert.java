@@ -1,4 +1,4 @@
-package com.yupi.yuimagesearchmcpserver.entity;
+package com.qtp.mcpserver.entity;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;

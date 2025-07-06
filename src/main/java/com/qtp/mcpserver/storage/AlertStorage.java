@@ -1,6 +1,6 @@
-package com.yupi.yuimagesearchmcpserver.storage;
+package com.qtp.mcpserver.storage;
 
-import com.yupi.yuimagesearchmcpserver.entity.Alert;
+import com.qtp.mcpserver.entity.Alert;
 
 import java.time.LocalDateTime;
 import java.util.Map;

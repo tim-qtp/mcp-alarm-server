@@ -1,8 +1,8 @@
-package com.yupi.yuimagesearchmcpserver;
+package com.qtp.mcpserver;
 
-import com.yupi.yuimagesearchmcpserver.tools.AlertManagementTool;
-import com.yupi.yuimagesearchmcpserver.tools.AlertTool;
-import com.yupi.yuimagesearchmcpserver.tools.ImageSearchTool;
+import com.qtp.mcpserver.tools.AlertManagementTool;
+import com.qtp.mcpserver.tools.AlertTool;
+import com.qtp.mcpserver.tools.ImageSearchTool;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.boot.SpringApplication;
@@ -10,10 +10,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
-public class YuImageSearchMcpServerApplication {
+public class McpServerApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(YuImageSearchMcpServerApplication.class, args);
+        SpringApplication.run(McpServerApplication.class, args);
     }
 
     @Bean

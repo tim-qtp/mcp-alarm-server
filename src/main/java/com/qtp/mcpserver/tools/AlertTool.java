@@ -1,9 +1,9 @@
-package com.yupi.yuimagesearchmcpserver.tools;
+package com.qtp.mcpserver.tools;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import com.yupi.yuimagesearchmcpserver.entity.Alert;
-import com.yupi.yuimagesearchmcpserver.storage.AlertStorage;
+import com.qtp.mcpserver.entity.Alert;
+import com.qtp.mcpserver.storage.AlertStorage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
