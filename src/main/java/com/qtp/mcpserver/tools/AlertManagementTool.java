@@ -2,6 +2,8 @@ package com.qtp.mcpserver.tools;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qtp.mcpserver.entity.Alert;
 import com.qtp.mcpserver.storage.AlertStorage;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,26 @@ public class AlertManagementTool {
     // 时间格式化器
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     
+    // 自定义的JSON序列化器
+    private final ObjectMapper objectMapper;
+    
+    public AlertManagementTool() {
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+    }
+    
+    /**
+     * 自定义JSON序列化方法
+     */
+    private String toJsonString(Object obj) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
+        } catch (Exception e) {
+            log.error("JSON序列化失败", e);
+            return JSONUtil.toJsonPrettyStr(obj);
+        }
+    }
+    
     @Tool(description = "更新告警信息")
     public String updateAlert(
             @ToolParam(description = "告警ID") String alertId,
@@ -37,6 +59,7 @@ public class AlertManagementTool {
             @ToolParam(description = "告警规则，可选") String rule,
             @ToolParam(description = "告警值，可选") String value,
             @ToolParam(description = "告警阈值，可选") String threshold) {
+        
         try {
             if (StrUtil.isBlank(alertId)) {
                 return "错误：告警ID不能为空";
@@ -58,9 +81,36 @@ public class AlertManagementTool {
             if (StrUtil.isNotBlank(value)) alert.setValue(value);
             if (StrUtil.isNotBlank(threshold)) alert.setThreshold(threshold);
             
+            // 更新时间
             alert.setUpdateTime(LocalDateTime.now());
             
-            return "告警更新成功：\n" + JSONUtil.toJsonPrettyStr(alert);
+            // 保存更新
+            alertStorage.saveAlert(alert);
+            
+            // 返回友好格式的文本
+            StringBuilder result = new StringBuilder();
+            result.append("告警更新成功！详细信息：\n");
+            result.append("- ID: ").append(alert.getId()).append("\n");
+            result.append("- 名称: ").append(alert.getName()).append("\n");
+            result.append("- 类型: ").append(alert.getType()).append("\n");
+            result.append("- 级别: ").append(alert.getLevel()).append("\n");
+            result.append("- 状态: ").append(alert.getStatus()).append("\n");
+            result.append("- 描述: ").append(alert.getDescription()).append("\n");
+            result.append("- 来源: ").append(alert.getSource()).append("\n");
+            result.append("- 创建时间: ").append(alert.getCreateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
+            result.append("- 更新时间: ").append(alert.getUpdateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
+            
+            if (StrUtil.isNotBlank(alert.getRule())) {
+                result.append("- 规则: ").append(alert.getRule()).append("\n");
+            }
+            if (StrUtil.isNotBlank(alert.getValue())) {
+                result.append("- 值: ").append(alert.getValue()).append("\n");
+            }
+            if (StrUtil.isNotBlank(alert.getThreshold())) {
+                result.append("- 阈值: ").append(alert.getThreshold()).append("\n");
+            }
+            
+            return result.toString();
         } catch (Exception e) {
             log.error("更新告警失败", e);
             return "更新告警失败：" + e.getMessage();
@@ -191,7 +241,7 @@ public class AlertManagementTool {
             statistics.put("按级别统计", levelStats);
             statistics.put("按类型统计", typeStats);
             
-            return "告警统计信息：\n" + JSONUtil.toJsonPrettyStr(statistics);
+            return "告警统计信息：\n" + toJsonString(statistics);
         } catch (Exception e) {
             log.error("获取告警统计失败", e);
             return "获取告警统计失败：" + e.getMessage();
@@ -232,7 +282,7 @@ public class AlertManagementTool {
             List<Alert> pageAlerts = matchedAlerts.subList(start, end);
             
             return "搜索结果（关键词：" + keyword + "，第" + pageNum + "页，共" + total + "条）：\n" + 
-                   JSONUtil.toJsonPrettyStr(pageAlerts);
+                   toJsonString(pageAlerts);
         } catch (Exception e) {
             log.error("搜索告警失败", e);
             return "搜索告警失败：" + e.getMessage();
@@ -273,7 +323,7 @@ public class AlertManagementTool {
                     .collect(Collectors.toList());
             
             return "时间范围查询结果（" + startTime + " 至 " + endTime + "，共" + filteredAlerts.size() + "条）：\n" + 
-                   JSONUtil.toJsonPrettyStr(filteredAlerts);
+                   toJsonString(filteredAlerts);
         } catch (Exception e) {
             log.error("按时间范围查询告警失败", e);
             return "按时间范围查询告警失败：" + e.getMessage();
