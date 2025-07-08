@@ -1,33 +1,38 @@
 package com.qtp.mcpserver.tools;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qtp.mcpserver.entity.Alert;
-import com.qtp.mcpserver.storage.AlertStorage;
 import lombok.extern.slf4j.Slf4j;
+import lombok.Data;
+import lombok.AllArgsConstructor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
+/**
+ * 基于MongoDB的告警MCP工具，所有数据均来源于数据库。
+ */
 @Service
 @Slf4j
 public class AlertTool {
     
-    // 使用共享的告警存储
-    private final AlertStorage alertStorage = AlertStorage.getInstance();
+    private final MongoTemplate mongoTemplate;
     
     // 自定义的JSON序列化器
     private final ObjectMapper objectMapper;
     
-    public AlertTool() {
+    @Autowired
+    public AlertTool(MongoTemplate mongoTemplate) {
+        this.mongoTemplate = mongoTemplate;
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
     }
@@ -37,10 +42,14 @@ public class AlertTool {
      */
     private String toJsonString(Object obj) {
         try {
+            if (obj instanceof AlertPageResult) {
+                AlertPageResult page = (AlertPageResult) obj;
+                return String.format("第%d页, 每页%d, 总数%d\n%s", page.getPageNum(), page.getPageSize(), page.getTotal(), objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(page.getData()));
+            }
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
         } catch (Exception e) {
             log.error("JSON序列化失败", e);
-            return JSONUtil.toJsonPrettyStr(obj);
+            return obj.toString();
         }
     }
 
@@ -50,36 +59,11 @@ public class AlertTool {
             if (StrUtil.isBlank(alertId)) {
                 return "错误：告警ID不能为空";
             }
-            
-            Alert alert = alertStorage.getAlert(alertId);
+            Alert alert = mongoTemplate.findById(alertId, Alert.class);
             if (alert == null) {
                 return "未找到ID为 " + alertId + " 的告警";
             }
-            
-            // 返回友好格式的文本
-            StringBuilder result = new StringBuilder();
-            result.append("告警详情：\n");
-            result.append("- ID: ").append(alert.getId()).append("\n");
-            result.append("- 名称: ").append(alert.getName()).append("\n");
-            result.append("- 类型: ").append(alert.getType()).append("\n");
-            result.append("- 级别: ").append(alert.getLevel()).append("\n");
-            result.append("- 状态: ").append(alert.getStatus()).append("\n");
-            result.append("- 描述: ").append(alert.getDescription()).append("\n");
-            result.append("- 来源: ").append(alert.getSource()).append("\n");
-            result.append("- 创建时间: ").append(alert.getCreateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
-            result.append("- 更新时间: ").append(alert.getUpdateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
-            
-            if (StrUtil.isNotBlank(alert.getRule())) {
-                result.append("- 规则: ").append(alert.getRule()).append("\n");
-            }
-            if (StrUtil.isNotBlank(alert.getValue())) {
-                result.append("- 值: ").append(alert.getValue()).append("\n");
-            }
-            if (StrUtil.isNotBlank(alert.getThreshold())) {
-                result.append("- 阈值: ").append(alert.getThreshold()).append("\n");
-            }
-            
-            return result.toString();
+            return toJsonString(alert);
         } catch (Exception e) {
             log.error("查询告警失败", e);
             return "查询告警失败：" + e.getMessage();
@@ -88,148 +72,80 @@ public class AlertTool {
 
     @Tool(description = "查询告警信息列表，支持按状态、级别、类型筛选")
     public String queryAlertList(
-            @ToolParam(description = "告警状态筛选 (ACTIVE, RESOLVED, PENDING)，可选") String status,
-            @ToolParam(description = "告警级别筛选 (LOW, MEDIUM, HIGH, CRITICAL)，可选") String level,
-            @ToolParam(description = "告警类型筛选，可选") String type,
+            @ToolParam(description = "告警状态筛选（Int32），可选") Integer status,
+            @ToolParam(description = "告警等级筛选（String），可选") String alarmLevel,
+            @ToolParam(description = "告警类型筛选（String），可选") String alarmType,
             @ToolParam(description = "每页数量，默认10") Integer pageSize,
-            @ToolParam(description = "页码，默认1") Integer pageNum) {
+            @ToolParam(description = "页码，默认1") Integer pageNum,
+            @ToolParam(description = "排序字段（如endTime），可选") String sortField,
+            @ToolParam(description = "排序方式，asc/desc，可选") String sortOrder) {
         try {
             if (pageSize == null || pageSize <= 0) pageSize = 10;
             if (pageNum == null || pageNum <= 0) pageNum = 1;
-            
-            // 从存储中获取所有告警
-            List<Alert> alerts = alertStorage.getAllAlerts().values().stream()
-                    .filter(alert -> status == null || status.equals(alert.getStatus()))
-                    .filter(alert -> level == null || level.equals(alert.getLevel()))
-                    .filter(alert -> type == null || type.equals(alert.getType()))
-                    .collect(Collectors.toList());
-            
-            // 分页处理
-            int total = alerts.size();
-            int start = (pageNum - 1) * pageSize;
-            int end = Math.min(start + pageSize, total);
-            
-            if (start >= total) {
-                return "告警列表（第" + pageNum + "页，共0条）：[]";
-            }
-            
-            List<Alert> pageAlerts = alerts.subList(start, end);
-            
-            return "告警列表（第" + pageNum + "页，共" + total + "条）：\n" + 
-                   toJsonString(pageAlerts);
+            if (sortField == null) sortField = "endTime";
+            Sort.Direction direction = "asc".equalsIgnoreCase(sortOrder) ? Sort.Direction.ASC : Sort.Direction.DESC;
+            Query query = new Query();
+            if (status != null) query.addCriteria(Criteria.where("status").is(status));
+            if (alarmLevel != null) query.addCriteria(Criteria.where("alarmLevel").is(alarmLevel));
+            if (alarmType != null) query.addCriteria(Criteria.where("alarmType").is(alarmType));
+            query.with(Sort.by(direction, sortField));
+            long total = mongoTemplate.count(query, Alert.class);
+            query.skip((long) (pageNum - 1) * pageSize).limit(pageSize);
+            java.util.List<Alert> alerts = mongoTemplate.find(query, Alert.class);
+            return toJsonString(new AlertPageResult(alerts, total, pageNum, pageSize));
         } catch (Exception e) {
             log.error("查询告警列表失败", e);
             return "查询告警列表失败：" + e.getMessage();
         }
     }
     
-    @Tool(description = "批量插入告警列表")
-    public String batchInsertAlerts(@ToolParam(description = "告警列表JSON字符串，格式：[{\"name\":\"告警名称\",\"type\":\"告警类型\",\"level\":\"告警级别\",\"status\":\"告警状态\",\"description\":\"告警描述\",\"source\":\"告警来源\",\"rule\":\"告警规则\",\"value\":\"告警值\",\"threshold\":\"告警阈值\"}]") String alertsJson) {
+    @Tool(description = "多条件分页查询告警信息列表")
+    public String searchAlerts(
+            @ToolParam(description = "告警等级（String），可选") String alarmLevel,
+            @ToolParam(description = "告警类型（String），可选") String alarmType,
+            @ToolParam(description = "所属单位（String），可选") String company,
+            @ToolParam(description = "告警状态（Int32），可选") Integer status,
+            @ToolParam(description = "开始时间（Date），可选") Date beginTime,
+            @ToolParam(description = "结束时间（Date），可选") Date endTime,
+            @ToolParam(description = "页码，默认1") Integer pageNum,
+            @ToolParam(description = "每页数量，默认10") Integer pageSize,
+            @ToolParam(description = "排序字段（如endTime），可选") String sortField,
+            @ToolParam(description = "排序方式，asc/desc，可选") String sortOrder
+    ) {
         try {
-            if (StrUtil.isBlank(alertsJson)) {
-                return "错误：告警列表JSON不能为空";
+            if (pageNum == null || pageNum <= 0) pageNum = 1;
+            if (pageSize == null || pageSize <= 0) pageSize = 10;
+            if (sortField == null) sortField = "endTime";
+            Sort.Direction direction = "asc".equalsIgnoreCase(sortOrder) ? Sort.Direction.ASC : Sort.Direction.DESC;
+            Query query = new Query();
+            if (alarmLevel != null) query.addCriteria(Criteria.where("alarmLevel").is(alarmLevel));
+            if (alarmType != null) query.addCriteria(Criteria.where("alarmType").is(alarmType));
+            if (company != null) query.addCriteria(Criteria.where("company").is(company));
+            if (status != null) query.addCriteria(Criteria.where("status").is(status));
+            if (beginTime != null && endTime != null) {
+                query.addCriteria(Criteria.where("endTime").gte(beginTime).lte(endTime));
+            } else if (beginTime != null) {
+                query.addCriteria(Criteria.where("endTime").gte(beginTime));
+            } else if (endTime != null) {
+                query.addCriteria(Criteria.where("endTime").lte(endTime));
             }
-            
-            // 解析JSON
-            List<Alert> alerts = JSONUtil.toList(alertsJson, Alert.class);
-            List<Alert> insertedAlerts = new ArrayList<>();
-            
-            for (Alert alert : alerts) {
-                // 验证必填字段
-                if (StrUtil.isBlank(alert.getName()) || StrUtil.isBlank(alert.getType()) || 
-                    StrUtil.isBlank(alert.getLevel()) || StrUtil.isBlank(alert.getStatus())) {
-                    continue; // 跳过无效数据
-                }
-                
-                // 设置ID和时间
-                alert.setId(UUID.randomUUID().toString());
-                alert.setCreateTime(LocalDateTime.now());
-                alert.setUpdateTime(LocalDateTime.now());
-                
-                // 设置默认值
-                if (StrUtil.isBlank(alert.getDescription())) {
-                    alert.setDescription("无描述");
-                }
-                if (StrUtil.isBlank(alert.getSource())) {
-                    alert.setSource("系统");
-                }
-                
-                // 保存到存储
-                alertStorage.saveAlert(alert);
-                insertedAlerts.add(alert);
-            }
-            
-            return "批量插入成功，共插入 " + insertedAlerts.size() + " 条告警：\n" + 
-                   toJsonString(insertedAlerts);
+            query.with(Sort.by(direction, sortField));
+            long total = mongoTemplate.count(query, Alert.class);
+            query.skip((long) (pageNum - 1) * pageSize).limit(pageSize);
+            java.util.List<Alert> alerts = mongoTemplate.find(query, Alert.class);
+            return toJsonString(new AlertPageResult(alerts, total, pageNum, pageSize));
         } catch (Exception e) {
-            log.error("批量插入告警失败", e);
-            return "批量插入告警失败：" + e.getMessage();
+            log.error("多条件分页查询告警失败", e);
+            return "多条件分页查询告警失败：" + e.getMessage();
         }
     }
-    
-    @Tool(description = "插入一条告警记录")
-    public String insertAlert(
-            @ToolParam(description = "告警名称") String name,
-            @ToolParam(description = "告警类型") String type,
-            @ToolParam(description = "告警级别 (LOW, MEDIUM, HIGH, CRITICAL)") String level,
-            @ToolParam(description = "告警状态 (ACTIVE, RESOLVED, PENDING)") String status,
-            @ToolParam(description = "告警描述，可选") String description,
-            @ToolParam(description = "告警来源，可选") String source,
-            @ToolParam(description = "告警规则，可选") String rule,
-            @ToolParam(description = "告警值，可选") String value,
-            @ToolParam(description = "告警阈值，可选") String threshold) {
-        
-        try {
-            // 验证必填字段
-            if (StrUtil.isBlank(name) || StrUtil.isBlank(type) || 
-                StrUtil.isBlank(level) || StrUtil.isBlank(status)) {
-                return "错误：告警名称、类型、级别、状态不能为空";
-            }
-            
-            // 创建告警对象
-            Alert alert = new Alert();
-            alert.setId(UUID.randomUUID().toString());
-            alert.setName(name);
-            alert.setType(type);
-            alert.setLevel(level);
-            alert.setStatus(status);
-            alert.setDescription(StrUtil.isBlank(description) ? "无描述" : description);
-            alert.setSource(StrUtil.isBlank(source) ? "系统" : source);
-            alert.setRule(rule);
-            alert.setValue(value);
-            alert.setThreshold(threshold);
-            alert.setCreateTime(LocalDateTime.now());
-            alert.setUpdateTime(LocalDateTime.now());
-            
-            // 保存到存储
-            alertStorage.saveAlert(alert);
-            
-            // 返回友好格式的文本
-            StringBuilder result = new StringBuilder();
-            result.append("告警插入成功！详细信息：\n");
-            result.append("- ID: ").append(alert.getId()).append("\n");
-            result.append("- 名称: ").append(alert.getName()).append("\n");
-            result.append("- 类型: ").append(alert.getType()).append("\n");
-            result.append("- 级别: ").append(alert.getLevel()).append("\n");
-            result.append("- 状态: ").append(alert.getStatus()).append("\n");
-            result.append("- 描述: ").append(alert.getDescription()).append("\n");
-            result.append("- 来源: ").append(alert.getSource()).append("\n");
-            result.append("- 创建时间: ").append(alert.getCreateTime().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))).append("\n");
-            
-            if (StrUtil.isNotBlank(alert.getRule())) {
-                result.append("- 规则: ").append(alert.getRule()).append("\n");
-            }
-            if (StrUtil.isNotBlank(alert.getValue())) {
-                result.append("- 值: ").append(alert.getValue()).append("\n");
-            }
-            if (StrUtil.isNotBlank(alert.getThreshold())) {
-                result.append("- 阈值: ").append(alert.getThreshold()).append("\n");
-            }
-            
-            return result.toString();
-        } catch (Exception e) {
-            log.error("插入告警失败", e);
-            return "插入告警失败：" + e.getMessage();
-        }
+
+    @Data
+    @AllArgsConstructor
+    static class AlertPageResult {
+        private List<Alert> data;
+        private long total;
+        private int pageNum;
+        private int pageSize;
     }
 } 

@@ -2,7 +2,6 @@ package com.qtp.mcpserver;
 
 import com.qtp.mcpserver.tools.AlertManagementTool;
 import com.qtp.mcpserver.tools.AlertTool;
-import com.qtp.mcpserver.tools.ImageSearchTool;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.boot.SpringApplication;
@@ -16,13 +15,8 @@ public class McpServerApplication {
         SpringApplication.run(McpServerApplication.class, args);
     }
 
-    @Bean
-    public ToolCallbackProvider imageSearchTools(ImageSearchTool imageSearchTool) {
-        return MethodToolCallbackProvider.builder()
-                .toolObjects(imageSearchTool)
-                .build();
-    }
 
+    //TODO: 整合成一个
     @Bean
     public ToolCallbackProvider alertTools(AlertTool alertTool) {
         return MethodToolCallbackProvider.builder()
